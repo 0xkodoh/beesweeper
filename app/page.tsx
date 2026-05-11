@@ -315,15 +315,16 @@ const createEmptyBoard = (difficulty: Difficulty): Cell[] => {
   }));
 };
 
-const createSeededBoard = (difficulty: Difficulty, safeCellIndex?: number): Cell[] => {
+const createSeededBoard = (difficulty: Difficulty, safeCellIndex: number): Cell[] => {
   const { size, bees } = getDifficultyConfig(difficulty);
   const totalCells = size * size;
   const beeIndexes = new Set<number>();
+  const protectedCellIndex = safeCellIndex >= 0 && safeCellIndex < totalCells ? safeCellIndex : -1;
 
   while (beeIndexes.size < bees) {
     const nextBeeIndex = Math.floor(Math.random() * totalCells);
 
-    if (nextBeeIndex !== safeCellIndex) {
+    if (nextBeeIndex !== protectedCellIndex) {
       beeIndexes.add(nextBeeIndex);
     }
   }
@@ -334,7 +335,7 @@ const createSeededBoard = (difficulty: Difficulty, safeCellIndex?: number): Cell
 
     return {
       id: index,
-      hasBee,
+      hasBee: index === protectedCellIndex ? false : hasBee,
       revealed: false,
       adjacentBees,
     };
@@ -362,6 +363,7 @@ export default function Home() {
   const [status, setStatus] = useState<GameStatus>("playing");
   const [hasMadeFirstMove, setHasMadeFirstMove] = useState(false);
   const hasMadeFirstMoveRef = useRef(false);
+  const boardSeededRef = useRef(false);
   const endGameHistoryCheckedRef = useRef(false);
   const [musicEnabled, setMusicEnabled] = useState(true);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
@@ -808,6 +810,7 @@ export default function Home() {
     setElapsed(0);
     setStatus("playing");
     hasMadeFirstMoveRef.current = false;
+    boardSeededRef.current = false;
     endGameHistoryCheckedRef.current = false;
     setHasMadeFirstMove(false);
     resetScoreSubmission();
@@ -826,6 +829,7 @@ export default function Home() {
     setElapsed(0);
     setStatus("playing");
     hasMadeFirstMoveRef.current = false;
+    boardSeededRef.current = false;
     endGameHistoryCheckedRef.current = false;
     setHasMadeFirstMove(false);
     resetScoreSubmission();
@@ -963,6 +967,7 @@ export default function Home() {
       return;
     }
 
+    const isFirstClick = !boardSeededRef.current;
     let activeBoard = board;
     let target = activeBoard[cellId];
 
@@ -970,14 +975,24 @@ export default function Home() {
       return;
     }
 
-    if (!hasMadeFirstMoveRef.current) {
+    if (isFirstClick) {
       hasMadeFirstMoveRef.current = true;
+      boardSeededRef.current = true;
       setHasMadeFirstMove(true);
       activeBoard = createSeededBoard(difficulty, cellId);
       target = activeBoard[cellId];
+
+      if (!target) {
+        return;
+      }
+
+      if (target.hasBee) {
+        target = { ...target, hasBee: false, adjacentBees: 0 };
+        activeBoard = activeBoard.map((cell) => (cell.id === cellId ? target : cell));
+      }
     }
 
-    if (target.hasBee) {
+    if (!isFirstClick && target.hasBee) {
       playSoundEffect(stingSoundRef.current);
       setBoard(activeBoard.map((cell) => (cell.id === cellId ? { ...cell, revealed: true } : cell)));
       setStatus("stung");
@@ -1209,6 +1224,17 @@ function WalletButton() {
       : isBusy
         ? "Connecting..."
         : "Connect Wallet";
+  const walletConnectorLabel = (connectorName: string) => {
+    if (connectorName.toLowerCase().includes("walletconnect")) {
+      return "WalletConnect";
+    }
+
+    if (connectorName.toLowerCase().includes("coinbase")) {
+      return "Coinbase Wallet";
+    }
+
+    return connectorName;
+  };
 
   useEffect(() => {
     if (!menuOpen) {
@@ -1241,22 +1267,23 @@ function WalletButton() {
     }
 
     if (isWrongNetwork) {
-      setMenuOpen(false);
       setCopied(false);
+      setMenuOpen(false);
       switchChain({ chainId: targetChain.id });
       return;
     }
 
-    if (isConnected) {
-      setMenuOpen((open) => !open);
+    setMenuOpen((open) => !open);
+  };
+
+  const connectWallet = (connector: (typeof connectors)[number]) => {
+    if (isBusy) {
       return;
     }
 
-    const connector = connectors[0];
-
-    if (connector) {
-      connect({ connector, chainId: targetChain.id });
-    }
+    setMenuOpen(false);
+    setCopied(false);
+    connect({ connector, chainId: targetChain.id });
   };
 
   const copyAddress = async () => {
@@ -1305,6 +1332,28 @@ function WalletButton() {
         <Wallet className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         <span className="truncate">{label}</span>
       </button>
+
+      {menuOpen && !isConnected && !isWrongNetwork ? (
+        <div className="absolute right-0 top-11 z-50 w-56 rounded-2xl border border-white/10 bg-[#07121F]/95 p-2 shadow-2xl shadow-black/35 backdrop-blur-xl">
+          <p className="px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-white/35">Choose Wallet</p>
+          {connectors.length > 0 ? (
+            connectors.map((connector) => (
+              <button
+                key={connector.uid}
+                type="button"
+                onClick={() => connectWallet(connector)}
+                className="mt-1 flex w-full items-center justify-between gap-3 whitespace-nowrap rounded-xl px-3.5 py-2.5 text-left text-xs font-black text-white/68 transition hover:-translate-y-px hover:bg-[#F8C342]/10 hover:text-[#F8C342] focus:outline-none focus:ring-2 focus:ring-[#F8C342]/25"
+                role="menuitem"
+              >
+                <span>{walletConnectorLabel(connector.name)}</span>
+                <Wallet className="h-3.5 w-3.5 text-white/35" aria-hidden="true" />
+              </button>
+            ))
+          ) : (
+            <p className="px-3.5 py-2.5 text-xs font-semibold text-white/45">No wallet connector found</p>
+          )}
+        </div>
+      ) : null}
 
       {menuOpen && isConnected && !isWrongNetwork ? (
         <div className="absolute right-0 top-11 z-50 w-56 rounded-2xl border border-white/10 bg-[#07121F]/95 p-2 shadow-2xl shadow-black/35 backdrop-blur-xl">
