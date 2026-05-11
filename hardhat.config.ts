@@ -4,6 +4,7 @@ import type { HardhatUserConfig } from "hardhat/config";
 
 const privateKey = process.env.PRIVATE_KEY;
 const rpcUrl = process.env.RPC_URL ?? "";
+const baseMainnetRpcUrl = process.env.BASE_MAINNET_RPC_URL ?? "";
 const accounts = privateKey ? [privateKey.startsWith("0x") ? privateKey : `0x${privateKey}`] : [];
 
 const config: HardhatUserConfig = {
@@ -20,6 +21,11 @@ const config: HardhatUserConfig = {
     baseSepolia: {
       url: rpcUrl,
       chainId: 84532,
+      accounts,
+    },
+    base: {
+      url: baseMainnetRpcUrl,
+      chainId: 8453,
       accounts,
     },
   },

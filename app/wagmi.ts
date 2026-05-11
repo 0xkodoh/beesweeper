@@ -1,13 +1,13 @@
 import { createConfig, http, injected } from "wagmi";
-import { baseSepolia } from "viem/chains";
+import { base } from "viem/chains";
 
-export const targetChain = baseSepolia;
+export const targetChain = base;
 
 export const wagmiConfig = createConfig({
-  chains: [baseSepolia],
+  chains: [base],
   connectors: [injected()],
   ssr: true,
   transports: {
-    [baseSepolia.id]: http(),
+    [base.id]: http(),
   },
 });

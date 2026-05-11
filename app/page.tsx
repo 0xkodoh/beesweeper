@@ -69,7 +69,7 @@ const BG_LOOP_LEAD_TIME = 0.12;
 const LEADERBOARD_STORAGE_KEY = "beesweeper.leaderboard.v1";
 const MAX_LEADERBOARD_ENTRIES = 10;
 const HISTORY_PAGE_SIZE = 10;
-const BASESCAN_TX_URL = "https://sepolia.basescan.org/tx";
+const BASESCAN_TX_URL = "https://basescan.org/tx";
 
 const formatTime = (seconds: number) => {
   const mins = Math.floor(seconds / 60).toString().padStart(2, "0");
@@ -895,13 +895,13 @@ export default function Home() {
       }
 
       if (chainId !== targetChain.id) {
-        setScoreSaveMessage("Switch to Base Sepolia");
+        setScoreSaveMessage("Switch to Base");
 
         try {
           await switchChainAsync({ chainId: targetChain.id });
         } catch {
           setSubmissionPhase("idle");
-          setScoreSaveMessage("Switch to Base Sepolia");
+          setScoreSaveMessage("Switch to Base");
           return;
         }
 
@@ -931,7 +931,7 @@ export default function Home() {
       setPendingScoreEntry(onchainEntry);
       setScoreTransactionHash(hash);
       setSubmissionPhase("pending");
-      setScoreSaveMessage("Waiting for Base Sepolia confirmation...");
+      setScoreSaveMessage("Waiting for Base confirmation...");
     } catch (error) {
       setSubmissionPhase("idle");
       setScoreSaveMessage(getSubmissionErrorMessage(error));
@@ -1384,7 +1384,7 @@ function LeaderboardSheet({ rows, onClose }: { rows: LeaderboardEntry[]; onClose
         </div>
 
         <p className="mt-2.5 text-center text-[11px] font-semibold text-white/45">
-          Scores are stored locally for now. Base Sepolia saving is coming later.
+          Scores are stored with onchain proof on Base.
         </p>
       </div>
     </div>
@@ -1445,7 +1445,7 @@ function HistorySheet({
                 >
                   x
                 </button>
-                Onchain scores are submitted to Base Sepolia and can be verified on Basescan. Offchain scores are saved locally and are not yet onchain.
+                Onchain scores are submitted to Base and can be verified on Basescan. Offchain scores are saved locally and are not yet onchain.
               </div>
             ) : null}
           </div>
@@ -1831,7 +1831,7 @@ function CompactStat({ label, value, accent = false }: { label: string; value: s
 function Footer() {
   return (
     <footer className="pb-1 pt-7 text-center text-xs font-semibold text-white/50">
-      Scores can be stored on Base Sepolia
+      Scores can be stored on Base
     </footer>
   );
 }
