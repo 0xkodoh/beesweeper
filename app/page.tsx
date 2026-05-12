@@ -15,8 +15,9 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
+import { useAppKit } from "@reown/appkit/react";
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { useConnect, useConnection, useDisconnect, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
+import { useConnection, useDisconnect, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import type { Hex } from "viem";
 import { beeSweeperScoresAbi, beeSweeperScoresAddress } from "./contracts";
 import { targetChain } from "./wagmi";
@@ -70,6 +71,7 @@ const LEADERBOARD_STORAGE_KEY = "beesweeper.leaderboard.v1";
 const MAX_LEADERBOARD_ENTRIES = 10;
 const HISTORY_PAGE_SIZE = 10;
 const BASESCAN_TX_URL = "https://basescan.org/tx";
+const leaderboardTabs: Difficulty[] = ["Hard", "Medium", "Easy"];
 
 const formatTime = (seconds: number) => {
   const mins = Math.floor(seconds / 60).toString().padStart(2, "0");
@@ -139,9 +141,14 @@ const formatHistoryDate = (timestamp: number) => {
   }).format(new Date(timestamp));
 };
 
-const normalizeLeaderboardEntries = (entries: LeaderboardEntry[]) => {
+const normalizeLeaderboardEntries = (entries: LeaderboardEntry[], selectedDifficulty?: Difficulty) => {
   return entries
-    .filter((entry) => isValidLeaderboardEntry(entry) && (entry.status === "onchain" || Boolean(entry.txHash)))
+    .filter(
+      (entry) =>
+        isValidLeaderboardEntry(entry) &&
+        (entry.status === "onchain" || Boolean(entry.txHash)) &&
+        (!selectedDifficulty || entry.difficulty === selectedDifficulty),
+    )
     .sort((first, second) => second.score - first.score || first.elapsed - second.elapsed || second.timestamp - first.timestamp)
     .slice(0, MAX_LEADERBOARD_ENTRIES);
 };
@@ -160,7 +167,7 @@ const filterHistoryForWallet = (entries: LeaderboardEntry[], walletAddress?: str
   return entries.filter((entry) => entry.player.toLowerCase() === normalizedWallet);
 };
 
-const readSavedLeaderboard = () => {
+const readSavedLeaderboard = (selectedDifficulty?: Difficulty) => {
   if (typeof window === "undefined") {
     return [];
   }
@@ -190,6 +197,7 @@ const readSavedLeaderboard = () => {
           (candidate.txHash === undefined || typeof candidate.txHash === "string")
         );
       }),
+      selectedDifficulty,
     );
   } catch {
     return [];
@@ -244,8 +252,9 @@ const writeFallbackLeaderboard = (entries: LeaderboardEntry[]) => {
   }
 };
 
-const fetchApiLeaderboard = async () => {
-  const response = await fetch("/api/scores", { cache: "no-store" });
+const fetchApiLeaderboard = async (selectedDifficulty: Difficulty) => {
+  const params = new URLSearchParams({ difficulty: selectedDifficulty });
+  const response = await fetch(`/api/scores?${params.toString()}`, { cache: "no-store" });
 
   if (!response.ok) {
     throw new Error("Unable to load scores");
@@ -257,7 +266,7 @@ const fetchApiLeaderboard = async () => {
     return [];
   }
 
-  return normalizeLeaderboardEntries((scores as LeaderboardEntry[]).filter(isValidLeaderboardEntry));
+  return normalizeLeaderboardEntries((scores as LeaderboardEntry[]).filter(isValidLeaderboardEntry), selectedDifficulty);
 };
 
 const fetchApiHistory = async () => {
@@ -353,7 +362,7 @@ const recalculateAdjacentBeeCounts = (cells: Cell[], size: number) => {
 
 export default function Home() {
   const { address: connectedAddress, chainId, isConnected } = useConnection();
-  const { connectors, connectAsync, isPending: isConnectPending } = useConnect();
+  const { open } = useAppKit();
   const { switchChainAsync, isPending: isSwitchPending } = useSwitchChain();
   const { writeContractAsync, isPending: isWritePending } = useWriteContract();
   const [difficulty, setDifficulty] = useState<Difficulty>("Medium");
@@ -368,6 +377,7 @@ export default function Home() {
   const [musicEnabled, setMusicEnabled] = useState(true);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [leaderboardDifficulty, setLeaderboardDifficulty] = useState<Difficulty>("Hard");
   const [leaderboardRows, setLeaderboardRows] = useState<LeaderboardEntry[]>([]);
   const [historyRows, setHistoryRows] = useState<LeaderboardEntry[]>([]);
   const [historyPage, setHistoryPage] = useState(0);
@@ -379,6 +389,7 @@ export default function Home() {
   const [pendingScoreEntry, setPendingScoreEntry] = useState<LeaderboardEntry | null>(null);
   const [currentGameEntry, setCurrentGameEntry] = useState<LeaderboardEntry | null>(null);
   const [isSavingScore, setIsSavingScore] = useState(false);
+  const [isWalletModalOpening, setIsWalletModalOpening] = useState(false);
   const bgMusicRef = useRef<HTMLAudioElement | null>(null);
   const bgMusicObjectUrlRef = useRef<string | null>(null);
   const bgLoopMonitorIdRef = useRef<number | null>(null);
@@ -457,14 +468,14 @@ export default function Home() {
 
     const loadScores = async () => {
       try {
-        const scores = await fetchApiLeaderboard();
+        const scores = await fetchApiLeaderboard("Hard");
 
         if (isCurrent) {
           setLeaderboardRows(scores);
         }
       } catch {
         if (isCurrent) {
-          setLeaderboardRows(readSavedLeaderboard());
+          setLeaderboardRows(readSavedLeaderboard("Hard"));
         }
       }
 
@@ -501,14 +512,14 @@ export default function Home() {
 
     const loadScores = async () => {
       try {
-        const scores = await fetchApiLeaderboard();
+        const scores = await fetchApiLeaderboard(leaderboardDifficulty);
 
         if (isCurrent) {
           setLeaderboardRows(scores);
         }
       } catch {
         if (isCurrent) {
-          setLeaderboardRows(readSavedLeaderboard());
+          setLeaderboardRows(readSavedLeaderboard(leaderboardDifficulty));
         }
       }
     };
@@ -518,7 +529,7 @@ export default function Home() {
     return () => {
       isCurrent = false;
     };
-  }, [leaderboardOpen]);
+  }, [leaderboardOpen, leaderboardDifficulty]);
 
   useEffect(() => {
     if (!historyOpen) {
@@ -708,13 +719,15 @@ export default function Home() {
       }
 
       const savedRows = await response.json();
-      const nextRows = Array.isArray(savedRows) ? normalizeLeaderboardEntries(savedRows as LeaderboardEntry[]) : normalizeLeaderboardEntries(upsertEntry(leaderboardRows));
+      const nextRows = Array.isArray(savedRows)
+        ? normalizeLeaderboardEntries([...leaderboardRows, ...(savedRows as LeaderboardEntry[])], leaderboardDifficulty)
+        : normalizeLeaderboardEntries(upsertEntry(leaderboardRows), leaderboardDifficulty);
       setLeaderboardRows(nextRows);
       setHistoryRows(nextHistory);
       writeFallbackLeaderboard(nextHistory);
       return true;
     } catch {
-      const nextRows = normalizeLeaderboardEntries(upsertEntry(leaderboardRows));
+      const nextRows = normalizeLeaderboardEntries(upsertEntry(leaderboardRows), leaderboardDifficulty);
       setLeaderboardRows(nextRows);
       setHistoryRows(nextHistory);
       writeFallbackLeaderboard(nextHistory);
@@ -836,24 +849,20 @@ export default function Home() {
   };
 
   const connectWalletForScore = async () => {
-    if (isConnected || isConnectPending) {
-      return;
-    }
-
-    const connector = connectors[0];
-
-    if (!connector) {
-      setScoreSaveMessage("No wallet connector found");
+    if (isConnected || isWalletModalOpening) {
       return;
     }
 
     setScoreSaveMessage("Connect wallet to save your score");
+    setIsWalletModalOpening(true);
 
     try {
-      await connectAsync({ connector, chainId: targetChain.id });
+      await open({ view: "Connect" });
       setScoreSaveMessage("");
     } catch {
       setScoreSaveMessage("Wallet connection cancelled");
+    } finally {
+      setIsWalletModalOpening(false);
     }
   };
 
@@ -1018,7 +1027,12 @@ export default function Home() {
       <div className="pointer-events-none absolute inset-0 opacity-[0.08] [background-image:linear-gradient(30deg,#fff_12%,transparent_12.5%,transparent_87%,#fff_87.5%,#fff),linear-gradient(150deg,#fff_12%,transparent_12.5%,transparent_87%,#fff_87.5%,#fff),linear-gradient(30deg,#fff_12%,transparent_12.5%,transparent_87%,#fff_87.5%,#fff),linear-gradient(150deg,#fff_12%,transparent_12.5%,transparent_87%,#fff_87.5%,#fff)] [background-position:0_0,0_0,22px_39px,22px_39px] [background-size:44px_78px]" />
 
       {leaderboardOpen && screen === "start" ? (
-        <LeaderboardSheet rows={leaderboardRows} onClose={() => setLeaderboardOpen(false)} />
+        <LeaderboardSheet
+          rows={leaderboardRows}
+          selectedDifficulty={leaderboardDifficulty}
+          onSelectDifficulty={setLeaderboardDifficulty}
+          onClose={() => setLeaderboardOpen(false)}
+        />
       ) : null}
 
       {historyOpen && screen === "game" ? (
@@ -1037,7 +1051,10 @@ export default function Home() {
           <div className="flex items-center justify-between gap-2">
             <button
               type="button"
-              onClick={() => setLeaderboardOpen(true)}
+              onClick={() => {
+                setLeaderboardDifficulty("Hard");
+                setLeaderboardOpen(true);
+              }}
               className="flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/80 backdrop-blur transition hover:border-[#F8C342]/35 hover:bg-[#F8C342]/10 hover:text-[#F8C342] focus:outline-none focus:ring-4 focus:ring-[#F8C342]/25"
               aria-label="Open leaderboard preview"
             >
@@ -1051,7 +1068,7 @@ export default function Home() {
             <BeeMark size="large" />
 
             <p className="mb-3 text-sm font-black uppercase tracking-normal text-[#F8C342]">
-              BASE SEPOLIA ARCADE
+              BASE ARCADE
             </p>
             <h1 className="text-5xl font-black leading-none tracking-normal text-white drop-shadow-[0_10px_20px_rgba(0,0,0,0.35)]">
               BeeSweeper
@@ -1207,15 +1224,16 @@ export default function Home() {
 
 function WalletButton() {
   const { address, chainId, isConnected, isConnecting } = useConnection();
-  const { connectors, connect, isPending: isConnectPending } = useConnect();
   const { disconnect, isPending: isDisconnectPending } = useDisconnect();
   const { switchChain, isPending: isSwitchPending } = useSwitchChain();
+  const { open } = useAppKit();
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isOpeningWalletModal, setIsOpeningWalletModal] = useState(false);
   const copyFeedbackTimerRef = useRef<number | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const isWrongNetwork = isConnected && chainId !== targetChain.id;
-  const isBusy = isConnecting || isConnectPending || isDisconnectPending || isSwitchPending;
+  const isBusy = isConnecting || isOpeningWalletModal || isDisconnectPending || isSwitchPending;
   const shortAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "";
   const label = isWrongNetwork
     ? "Switch Network"
@@ -1224,17 +1242,6 @@ function WalletButton() {
       : isBusy
         ? "Connecting..."
         : "Connect Wallet";
-  const walletConnectorLabel = (connectorName: string) => {
-    if (connectorName.toLowerCase().includes("walletconnect")) {
-      return "WalletConnect";
-    }
-
-    if (connectorName.toLowerCase().includes("coinbase")) {
-      return "Coinbase Wallet";
-    }
-
-    return connectorName;
-  };
 
   useEffect(() => {
     if (!menuOpen) {
@@ -1261,7 +1268,7 @@ function WalletButton() {
     };
   }, []);
 
-  const handleWalletClick = () => {
+  const handleWalletClick = async () => {
     if (isBusy) {
       return;
     }
@@ -1273,17 +1280,18 @@ function WalletButton() {
       return;
     }
 
-    setMenuOpen((open) => !open);
-  };
-
-  const connectWallet = (connector: (typeof connectors)[number]) => {
-    if (isBusy) {
+    if (isConnected) {
+      setMenuOpen((openMenu) => !openMenu);
       return;
     }
 
-    setMenuOpen(false);
-    setCopied(false);
-    connect({ connector, chainId: targetChain.id });
+    setIsOpeningWalletModal(true);
+
+    try {
+      await open({ view: "Connect" });
+    } finally {
+      setIsOpeningWalletModal(false);
+    }
   };
 
   const copyAddress = async () => {
@@ -1324,36 +1332,14 @@ function WalletButton() {
               ? "border-emerald-300/25 bg-emerald-300/[0.08] text-emerald-100/80 hover:bg-emerald-300/[0.12]"
               : "border-white/12 bg-white/[0.055] text-white/58 hover:border-[#0052FF]/30 hover:bg-[#0052FF]/10 hover:text-white/78"
         }`}
-        aria-expanded={isConnected && !isWrongNetwork ? menuOpen : undefined}
-        aria-haspopup={isConnected && !isWrongNetwork ? "menu" : undefined}
+        aria-expanded={isConnected ? menuOpen : undefined}
+        aria-haspopup={isConnected ? "menu" : undefined}
         aria-label={isWrongNetwork ? `Switch to ${targetChain.name}` : isConnected ? `Wallet menu for ${shortAddress}` : "Connect wallet"}
-        title={isConnected && !isWrongNetwork ? "Wallet options" : undefined}
+        title={isConnected && !isWrongNetwork ? "Wallet options" : "Connect wallet"}
       >
         <Wallet className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         <span className="truncate">{label}</span>
       </button>
-
-      {menuOpen && !isConnected && !isWrongNetwork ? (
-        <div className="absolute right-0 top-11 z-50 w-56 rounded-2xl border border-white/10 bg-[#07121F]/95 p-2 shadow-2xl shadow-black/35 backdrop-blur-xl">
-          <p className="px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-white/35">Choose Wallet</p>
-          {connectors.length > 0 ? (
-            connectors.map((connector) => (
-              <button
-                key={connector.uid}
-                type="button"
-                onClick={() => connectWallet(connector)}
-                className="mt-1 flex w-full items-center justify-between gap-3 whitespace-nowrap rounded-xl px-3.5 py-2.5 text-left text-xs font-black text-white/68 transition hover:-translate-y-px hover:bg-[#F8C342]/10 hover:text-[#F8C342] focus:outline-none focus:ring-2 focus:ring-[#F8C342]/25"
-                role="menuitem"
-              >
-                <span>{walletConnectorLabel(connector.name)}</span>
-                <Wallet className="h-3.5 w-3.5 text-white/35" aria-hidden="true" />
-              </button>
-            ))
-          ) : (
-            <p className="px-3.5 py-2.5 text-xs font-semibold text-white/45">No wallet connector found</p>
-          )}
-        </div>
-      ) : null}
 
       {menuOpen && isConnected && !isWrongNetwork ? (
         <div className="absolute right-0 top-11 z-50 w-56 rounded-2xl border border-white/10 bg-[#07121F]/95 p-2 shadow-2xl shadow-black/35 backdrop-blur-xl">
@@ -1386,14 +1372,26 @@ function WalletButton() {
   );
 }
 
-function LeaderboardSheet({ rows, onClose }: { rows: LeaderboardEntry[]; onClose: () => void }) {
+function LeaderboardSheet({
+  rows,
+  selectedDifficulty,
+  onSelectDifficulty,
+  onClose,
+}: {
+  rows: LeaderboardEntry[];
+  selectedDifficulty: Difficulty;
+  onSelectDifficulty: (difficulty: Difficulty) => void;
+  onClose: () => void;
+}) {
+  const visibleRows = normalizeLeaderboardEntries(rows, selectedDifficulty);
+
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#050B13]/55 px-4 py-5 backdrop-blur-sm">
       <div className="w-full max-w-md translate-y-0 rounded-[1.6rem] border border-white/10 bg-[#07121F]/95 p-5 shadow-2xl shadow-black/50 animate-in fade-in slide-in-from-bottom-4 duration-200">
         <div className="mb-2.5 flex items-center justify-between gap-3">
           <div>
             <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#F8C342]">Leaderboard</p>
-            <h2 className="mt-0.5 text-xl font-black leading-none text-white">Top Hive Clears</h2>
+            <h2 className="mt-0.5 text-xl font-black leading-none text-white">Top {selectedDifficulty} Scores</h2>
           </div>
           <button
             type="button"
@@ -1405,29 +1403,59 @@ function LeaderboardSheet({ rows, onClose }: { rows: LeaderboardEntry[]; onClose
           </button>
         </div>
 
-        <div className="max-h-[62vh] space-y-1.5 overflow-y-auto pr-1">
-          {rows.length > 0 ? (
-            rows.map((row, index) => (
-              <div
-                key={row.id}
-                className="grid grid-cols-[2rem_1fr_auto] items-center gap-2 rounded-xl border border-white/10 bg-white/[0.055] px-2.5 py-1.5"
+        <div className="mb-2.5 grid grid-cols-3 gap-1 rounded-2xl border border-white/10 bg-white/[0.045] p-1">
+          {leaderboardTabs.map((tab) => {
+            const isSelected = tab === selectedDifficulty;
+
+            return (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => onSelectDifficulty(tab)}
+                className={`rounded-xl px-2 py-1.5 text-[10px] font-black uppercase transition focus:outline-none focus:ring-4 focus:ring-[#F8C342]/20 ${
+                  isSelected
+                    ? "bg-[#F8C342] text-[#07121F] shadow-lg shadow-[#F8C342]/15"
+                    : "text-white/55 hover:bg-white/[0.07] hover:text-white"
+                }`}
               >
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#F8C342]/15 font-mono text-xs font-black text-[#F8C342]">
-                  {index + 1}
+                {tab}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="max-h-[62vh] space-y-1.5 overflow-y-auto pr-1">
+          {visibleRows.length > 0 ? (
+            visibleRows.map((row, index) => {
+              const statusLabel = row.status === "onchain" || row.txHash ? "Onchain" : "Offchain";
+
+              return (
+                <div
+                  key={row.id}
+                  className="grid grid-cols-[2rem_1fr_auto] items-center gap-2 rounded-xl border border-white/10 bg-white/[0.055] px-2.5 py-1.5"
+                >
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#F8C342]/15 font-mono text-xs font-black text-[#F8C342]">
+                    {index + 1}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-xs font-black text-white">{shortPlayerName(row.player)}</p>
+                    <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                      <p className="truncate text-[9px] font-black uppercase tracking-[0.13em] text-white/38">
+                        {row.difficulty} / {formatTime(row.elapsed)}
+                      </p>
+                      <span className="shrink-0 rounded-full border border-[#F8C342]/20 bg-[#F8C342]/10 px-1.5 py-0.5 text-[8px] font-black uppercase text-[#F8C342]/80">
+                        {statusLabel}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="font-mono text-xs font-black text-white">{row.score.toLocaleString()}</p>
                 </div>
-                <div className="min-w-0">
-                  <p className="truncate font-mono text-xs font-black text-white">{shortPlayerName(row.player)}</p>
-                  <p className="mt-0.5 text-[9px] font-black uppercase tracking-[0.13em] text-white/38">
-                    {row.difficulty} / {formatTime(row.elapsed)}
-                  </p>
-                </div>
-                <p className="font-mono text-xs font-black text-white">{row.score.toLocaleString()}</p>
-              </div>
-            ))
+              );
+            })
           ) : (
             <div className="rounded-xl border border-white/10 bg-white/[0.055] px-4 py-5 text-center">
               <p className="text-sm font-black text-white">No saved scores yet</p>
-              <p className="mt-1 text-xs font-semibold text-white/45">Clear a hive, submit the result, and it will show up here.</p>
+              <p className="mt-1 text-xs font-semibold text-white/45">Submit a {selectedDifficulty} score and it will show up here.</p>
             </div>
           )}
         </div>

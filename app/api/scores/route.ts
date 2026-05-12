@@ -91,6 +91,10 @@ const normalizeScores = (scores: ScoreEntry[]) => {
     .slice(0, MAX_SCORES);
 };
 
+const normalizeScoresForDifficulty = (scores: ScoreEntry[], difficulty?: Difficulty) => {
+  return normalizeScores(difficulty ? scores.filter((score) => score.difficulty === difficulty) : scores);
+};
+
 const normalizeHistory = (scores: ScoreEntry[]) => {
   return scores.filter(isValidScoreEntry).sort((first, second) => second.timestamp - first.timestamp).slice(0, MAX_HISTORY);
 };
@@ -167,11 +171,13 @@ const toSupabaseRow = (entry: ScoreEntry) => ({
   tx_hash: entry.txHash ?? null,
 });
 
-const readScores = async (view: "leaderboard" | "history" = "leaderboard") => {
+const readScores = async (view: "leaderboard" | "history" = "leaderboard", difficulty?: Difficulty) => {
   const query =
     view === "history"
       ? `scores?select=*&order=timestamp.desc&limit=${MAX_HISTORY}`
-      : `scores?select=*&order=score.desc&limit=${MAX_SCORES}`;
+      : `scores?select=*&order=score.desc,elapsed.asc,timestamp.desc&limit=${MAX_SCORES}${
+          difficulty ? `&difficulty=eq.${encodeURIComponent(difficulty)}` : ""
+        }`;
   const response = await supabaseFetch(
     query,
   );
@@ -186,7 +192,9 @@ const readScores = async (view: "leaderboard" | "history" = "leaderboard") => {
     return [];
   }
 
-  return normalizeHistory(rows.map(fromSupabaseRow).filter((entry): entry is ScoreEntry => Boolean(entry)));
+  const entries = rows.map(fromSupabaseRow).filter((entry): entry is ScoreEntry => Boolean(entry));
+
+  return view === "history" ? normalizeHistory(entries) : normalizeScoresForDifficulty(entries, difficulty);
 };
 
 const createScoreEntry = (body: unknown): { entry: ScoreEntry | null; error: string } => {
@@ -242,10 +250,13 @@ const createScoreEntry = (body: unknown): { entry: ScoreEntry | null; error: str
 
 export async function GET(request: Request) {
   try {
-    const view = new URL(request.url).searchParams.get("view");
-    const scores = await readScores(view === "history" ? "history" : "leaderboard");
+    const params = new URL(request.url).searchParams;
+    const view = params.get("view");
+    const difficultyParam = params.get("difficulty");
+    const difficulty = difficulties.includes(difficultyParam as Difficulty) ? (difficultyParam as Difficulty) : undefined;
+    const scores = await readScores(view === "history" ? "history" : "leaderboard", view === "history" ? undefined : difficulty);
 
-    return NextResponse.json(view === "history" ? normalizeHistory(scores) : normalizeScores(scores));
+    return NextResponse.json(view === "history" ? normalizeHistory(scores) : normalizeScoresForDifficulty(scores, difficulty));
   } catch {
     return NextResponse.json({ error: "Unable to load scores" }, { status: 500 });
   }
@@ -302,9 +313,9 @@ export async function POST(request: Request) {
       await throwSupabaseResponseError("Save score", writeResponse);
     }
 
-    const scores = await readScores("leaderboard");
+    const scores = await readScores("leaderboard", entry.difficulty);
 
-    return NextResponse.json(normalizeScores(scores));
+    return NextResponse.json(normalizeScoresForDifficulty(scores, entry.difficulty));
   } catch {
     return NextResponse.json({ error: "Unable to save score" }, { status: 500 });
   }
