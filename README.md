@@ -20,6 +20,18 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Score Integrity
+
+BeeSweeper is currently an MVP client-side onchain game. Score submissions are protected with lightweight validation, including difficulty checks, score bounds, wallet-required submissions, duplicate submission blocking, and onchain proof links for submitted scores.
+
+Stronger server-signed score verification is planned for a future version so completed games can be validated before onchain submission with a higher level of integrity.
+
+## Verified Contract
+
+BeeSweeper score submissions use the verified Base Mainnet contract at `0xd2A1b3D33A7Ebb1F2E877de2187574114DacDF24`.
+
+View the verified source on Basescan: [BeeSweeperScores](https://basescan.org/address/0xd2A1b3D33A7Ebb1F2E877de2187574114DacDF24#code)
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

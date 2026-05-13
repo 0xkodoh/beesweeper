@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 
-export const beeSweeperScoresAddress = "0xA130B42f8571dA5d3ed80C4d1D1e515172f0A760" as Address;
+export const beeSweeperScoresAddress = "0xd2A1b3D33A7Ebb1F2E877de2187574114DacDF24" as Address;
 
 export const beeSweeperScoresAbi = [
   {

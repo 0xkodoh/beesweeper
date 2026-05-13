@@ -8,6 +8,8 @@
     "start": "next start",
     "compile:contracts": "hardhat compile",
     "deploy:base-sepolia": "hardhat run scripts/deploy.ts --network baseSepolia",
+    "deploy:base": "hardhat run scripts/deploy.ts --network base",
+    "verify:base": "hardhat verify --network base 0xd2A1b3D33A7Ebb1F2E877de2187574114DacDF24",
     "lint": "eslint"
   },
   "dependencies": {
@@ -36,6 +38,7 @@
     "eslint-config-next": "16.2.4",
     "hardhat": "^2.27.0",
     "tailwindcss": "^4",
+    "ts-node": "^10.9.2",
     "typescript": "^5"
   }
 }

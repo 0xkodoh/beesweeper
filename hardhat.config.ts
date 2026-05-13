@@ -1,9 +1,10 @@
 import "dotenv/config";
 import "@nomicfoundation/hardhat-toolbox";
+import "@nomicfoundation/hardhat-verify";
 import type { HardhatUserConfig } from "hardhat/config";
 
 const privateKey = process.env.PRIVATE_KEY;
-const rpcUrl = process.env.RPC_URL ?? "";
+const baseSepoliaRpcUrl = process.env.BASE_SEPOLIA_RPC_URL ?? process.env.RPC_URL ?? "";
 const baseMainnetRpcUrl = process.env.BASE_MAINNET_RPC_URL ?? "";
 const accounts = privateKey ? [privateKey.startsWith("0x") ? privateKey : `0x${privateKey}`] : [];
 
@@ -19,7 +20,7 @@ const config: HardhatUserConfig = {
   },
   networks: {
     baseSepolia: {
-      url: rpcUrl,
+      url: baseSepoliaRpcUrl,
       chainId: 84532,
       accounts,
     },
@@ -27,6 +28,11 @@ const config: HardhatUserConfig = {
       url: baseMainnetRpcUrl,
       chainId: 8453,
       accounts,
+    },
+  },
+  etherscan: {
+    apiKey: {
+      base: process.env.BASESCAN_API_KEY ?? "",
     },
   },
 };
