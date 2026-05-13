@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "BeeSweeper",
   description: "Clear the hive. Avoid the bees.",
+  other: {
+    "base:app_id": "6a05008173adbbd91cb022f2",
+  },
 };
 
 export default function RootLayout({
