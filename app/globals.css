@@ -27,6 +27,30 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-button {
+button,
+a,
+input,
+select,
+textarea {
+  appearance: none;
+  -webkit-appearance: none;
+  color: inherit;
   font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.difficulty-button-active,
+.difficulty-button-active span {
+  color: #07121f !important;
+  -webkit-text-fill-color: #07121f !important;
+}
+
+.difficulty-button-inactive {
+  color: rgb(255 255 255 / 0.7) !important;
+  -webkit-text-fill-color: rgb(255 255 255 / 0.7) !important;
+}
+
+.difficulty-button-inactive span {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
 }

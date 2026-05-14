@@ -393,10 +393,18 @@ export default function Home() {
   const bgMusicRef = useRef<HTMLAudioElement | null>(null);
   const bgMusicObjectUrlRef = useRef<string | null>(null);
   const bgLoopMonitorIdRef = useRef<number | null>(null);
+  const bgMusicResumePromiseRef = useRef<Promise<void> | null>(null);
+  const musicEnabledRef = useRef(musicEnabled);
+  const screenRef = useRef(screen);
+  const statusRef = useRef(status);
   const clickSoundRef = useRef<HTMLAudioElement | null>(null);
   const stingSoundRef = useRef<HTMLAudioElement | null>(null);
   const winSoundRef = useRef<HTMLAudioElement | null>(null);
   const scoreFeedbackTimerRef = useRef<number | null>(null);
+
+  musicEnabledRef.current = musicEnabled;
+  screenRef.current = screen;
+  statusRef.current = status;
 
   const selectedDifficulty = getDifficultyConfig(difficulty);
   const totalCells = selectedDifficulty.size * selectedDifficulty.size;
@@ -666,6 +674,54 @@ export default function Home() {
     bgMusic.volume = BG_MUSIC_VOLUME;
     await bgMusic.play().catch(() => undefined);
   };
+
+  const resumeBackgroundMusic = () => {
+    const bgMusic = bgMusicRef.current;
+
+    if (
+      !musicEnabledRef.current ||
+      screenRef.current !== "game" ||
+      statusRef.current !== "playing" ||
+      !bgMusic ||
+      !bgMusic.paused ||
+      bgMusicResumePromiseRef.current
+    ) {
+      return;
+    }
+
+    bgMusic.volume = BG_MUSIC_VOLUME;
+    bgMusicResumePromiseRef.current = bgMusic.play().catch(() => undefined).finally(() => {
+      bgMusicResumePromiseRef.current = null;
+    });
+  };
+
+  const resumeBackgroundMusicAfterSoundEffect = () => {
+    resumeBackgroundMusic();
+    window.setTimeout(resumeBackgroundMusic, 0);
+  };
+
+  useEffect(() => {
+    const resumeFromGesture = () => resumeBackgroundMusic();
+    const resumeFromVisibility = () => {
+      if (document.visibilityState === "visible") {
+        resumeBackgroundMusic();
+      }
+    };
+
+    window.addEventListener("pointerdown", resumeFromGesture, { passive: true });
+    window.addEventListener("touchend", resumeFromGesture, { passive: true });
+    window.addEventListener("click", resumeFromGesture);
+    window.addEventListener("focus", resumeFromGesture);
+    document.addEventListener("visibilitychange", resumeFromVisibility);
+
+    return () => {
+      window.removeEventListener("pointerdown", resumeFromGesture);
+      window.removeEventListener("touchend", resumeFromGesture);
+      window.removeEventListener("click", resumeFromGesture);
+      window.removeEventListener("focus", resumeFromGesture);
+      document.removeEventListener("visibilitychange", resumeFromVisibility);
+    };
+  }, []);
 
   const playSoundEffect = (audio: HTMLAudioElement | null) => {
     if (!audio) {
@@ -976,6 +1032,8 @@ export default function Home() {
       return;
     }
 
+    resumeBackgroundMusic();
+
     const isFirstClick = !boardSeededRef.current;
     let activeBoard = board;
     let target = activeBoard[cellId];
@@ -1003,6 +1061,7 @@ export default function Home() {
 
     if (!isFirstClick && target.hasBee) {
       playSoundEffect(stingSoundRef.current);
+      resumeBackgroundMusicAfterSoundEffect();
       setBoard(activeBoard.map((cell) => (cell.id === cellId ? { ...cell, revealed: true } : cell)));
       setStatus("stung");
       return;
@@ -1011,10 +1070,12 @@ export default function Home() {
     const nextRevealedSafeCells = revealedSafeCells + 1;
 
     playSoundEffect(clickSoundRef.current);
+    resumeBackgroundMusicAfterSoundEffect();
     setBoard(activeBoard.map((cell) => (cell.id === cellId ? { ...cell, revealed: true } : cell)));
 
     if (nextRevealedSafeCells === safeCellTotal) {
       playSoundEffect(winSoundRef.current);
+      resumeBackgroundMusicAfterSoundEffect();
       setStatus("cleared");
     }
   };
@@ -1869,6 +1930,7 @@ function DifficultySelector({
       <div className="grid grid-cols-3 gap-2 rounded-2xl bg-[#07121F]/70 p-1.5">
         {difficulties.map((item) => {
           const active = item.label === difficulty;
+          const difficultyTextColor = active ? "#07121F" : "rgba(255, 255, 255, 0.7)";
 
           return (
             <button
@@ -1876,14 +1938,23 @@ function DifficultySelector({
               type="button"
               onClick={() => setDifficulty(item.label)}
               aria-pressed={active}
+              style={{ color: difficultyTextColor, WebkitTextFillColor: difficultyTextColor }}
               className={`min-h-16 rounded-xl px-2 text-center transition ${
                 active
-                  ? "bg-[#F8C342] text-[#07121F] shadow-[0_8px_22px_rgba(248,195,66,0.28)]"
-                  : "bg-white/[0.06] text-white/70 hover:bg-white/[0.1] hover:text-white"
+                  ? "difficulty-button-active bg-[#F8C342] text-[#07121F] shadow-[0_8px_22px_rgba(248,195,66,0.28)]"
+                  : "difficulty-button-inactive bg-white/[0.06] text-white/70 hover:bg-white/[0.1] hover:text-white"
               }`}
             >
-              <span className="block text-sm font-black">{item.label}</span>
-              <span className="mt-1 block text-[10px] font-bold uppercase tracking-wider opacity-70">
+              <span
+                className={`block text-sm font-black ${active ? "text-[#07121F]" : "text-white/70"}`}
+                style={{ color: difficultyTextColor, WebkitTextFillColor: difficultyTextColor }}
+              >
+                {item.label}
+              </span>
+              <span
+                className={`mt-1 block text-[10px] font-bold uppercase tracking-wider opacity-70 ${active ? "text-[#07121F]" : "text-white/70"}`}
+                style={{ color: difficultyTextColor, WebkitTextFillColor: difficultyTextColor }}
+              >
                 {item.hint}
               </span>
             </button>
