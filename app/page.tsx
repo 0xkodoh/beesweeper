@@ -312,6 +312,42 @@ const getNeighborIndexes = (index: number, size: number) => {
   return neighbors;
 };
 
+const countAdjacentBees = (index: number, size: number, beeIndexes: Set<number>) => {
+  return getNeighborIndexes(index, size).filter((neighbor) => beeIndexes.has(neighbor)).length;
+};
+
+const getEasyProtectedIndexes = (firstClickIndex: number, size: number, totalCells: number) => {
+  const protectedIndexes = new Set<number>();
+
+  if (firstClickIndex < 0 || firstClickIndex >= totalCells) {
+    return protectedIndexes;
+  }
+
+  protectedIndexes.add(firstClickIndex);
+  getNeighborIndexes(firstClickIndex, size).forEach((neighbor) => protectedIndexes.add(neighbor));
+
+  return protectedIndexes;
+};
+
+const pickBeeIndex = (candidates: number[], size: number, beeIndexes: Set<number>, separationBias: "none" | "soft") => {
+  if (candidates.length === 0) {
+    return -1;
+  }
+
+  if (separationBias === "none" || beeIndexes.size === 0 || Math.random() > 0.55) {
+    return candidates[Math.floor(Math.random() * candidates.length)] ?? -1;
+  }
+
+  const scoredCandidates = candidates.map((index) => ({
+    index,
+    adjacentBees: countAdjacentBees(index, size, beeIndexes),
+  }));
+  const looselySeparatedPool = scoredCandidates.filter((candidate) => candidate.adjacentBees <= 1);
+  const pool = looselySeparatedPool.length > 0 ? looselySeparatedPool : scoredCandidates;
+
+  return pool[Math.floor(Math.random() * pool.length)]?.index ?? -1;
+};
+
 const createEmptyBoard = (difficulty: Difficulty): Cell[] => {
   const { size } = getDifficultyConfig(difficulty);
   const totalCells = size * size;
@@ -329,22 +365,29 @@ const createSeededBoard = (difficulty: Difficulty, safeCellIndex: number): Cell[
   const totalCells = size * size;
   const beeIndexes = new Set<number>();
   const protectedCellIndex = safeCellIndex >= 0 && safeCellIndex < totalCells ? safeCellIndex : -1;
+  const protectedIndexes =
+    difficulty === "Easy" ? getEasyProtectedIndexes(protectedCellIndex, size, totalCells) : new Set([protectedCellIndex]);
 
   while (beeIndexes.size < bees) {
-    const nextBeeIndex = Math.floor(Math.random() * totalCells);
+    const candidates = Array.from({ length: totalCells }, (_, index) => index).filter(
+      (index) => !protectedIndexes.has(index) && !beeIndexes.has(index),
+    );
+    const nextBeeIndex = pickBeeIndex(candidates, size, beeIndexes, difficulty === "Easy" ? "soft" : "none");
 
-    if (nextBeeIndex !== protectedCellIndex) {
-      beeIndexes.add(nextBeeIndex);
+    if (nextBeeIndex === -1) {
+      break;
     }
+
+    beeIndexes.add(nextBeeIndex);
   }
 
   return Array.from({ length: totalCells }, (_, index) => {
     const hasBee = beeIndexes.has(index);
-    const adjacentBees = getNeighborIndexes(index, size).filter((neighbor) => beeIndexes.has(neighbor)).length;
+    const adjacentBees = countAdjacentBees(index, size, beeIndexes);
 
     return {
       id: index,
-      hasBee: index === protectedCellIndex ? false : hasBee,
+      hasBee: protectedIndexes.has(index) ? false : hasBee,
       revealed: false,
       adjacentBees,
     };
@@ -356,8 +399,66 @@ const recalculateAdjacentBeeCounts = (cells: Cell[], size: number) => {
 
   return cells.map((cell) => ({
     ...cell,
-    adjacentBees: getNeighborIndexes(cell.id, size).filter((neighbor) => beeIndexes.has(neighbor)).length,
+    adjacentBees: countAdjacentBees(cell.id, size, beeIndexes),
   }));
+};
+
+const hasOnlyLowDangerRevealedNeighbors = (cells: Cell[], cellId: number, size: number) => {
+  let hasRevealedNeighbor = false;
+
+  return getNeighborIndexes(cellId, size).some((neighbor) => {
+    const cell = cells[neighbor];
+
+    if (!cell?.revealed || cell.hasBee) {
+      return false;
+    }
+
+    hasRevealedNeighbor = true;
+
+    return cell.adjacentBees > 1;
+  })
+    ? false
+    : hasRevealedNeighbor;
+};
+
+const applyEasyStreakProtection = (cells: Cell[], cellId: number, difficulty: Difficulty, safeClickStreak: number) => {
+  if (difficulty !== "Easy" || safeClickStreak < 8 || Math.random() > 0.12) {
+    return cells;
+  }
+
+  const { size } = getDifficultyConfig(difficulty);
+  const target = cells[cellId];
+
+  if (!target?.hasBee || target.adjacentBees < 2 || !hasOnlyLowDangerRevealedNeighbors(cells, cellId, size)) {
+    return cells;
+  }
+
+  const protectedIndexes = new Set([cellId]);
+  const currentBeeIndexes = new Set(cells.filter((cell) => cell.hasBee).map((cell) => cell.id));
+  currentBeeIndexes.delete(cellId);
+
+  const candidates = cells
+    .filter((cell) => !cell.revealed && !cell.hasBee && !protectedIndexes.has(cell.id))
+    .map((cell) => cell.id);
+  const newBeeIndex = pickBeeIndex(candidates, size, currentBeeIndexes, "soft");
+
+  if (newBeeIndex === -1) {
+    return cells;
+  }
+
+  const relocatedBoard = cells.map((cell) => {
+    if (cell.id === cellId) {
+      return { ...cell, hasBee: false };
+    }
+
+    if (cell.id === newBeeIndex) {
+      return { ...cell, hasBee: true };
+    }
+
+    return cell;
+  });
+
+  return recalculateAdjacentBeeCounts(relocatedBoard, size);
 };
 
 export default function Home() {
@@ -373,6 +474,7 @@ export default function Home() {
   const [hasMadeFirstMove, setHasMadeFirstMove] = useState(false);
   const hasMadeFirstMoveRef = useRef(false);
   const boardSeededRef = useRef(false);
+  const safeClickStreakRef = useRef(0);
   const endGameHistoryCheckedRef = useRef(false);
   const [musicEnabled, setMusicEnabled] = useState(true);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
@@ -880,6 +982,7 @@ export default function Home() {
     setStatus("playing");
     hasMadeFirstMoveRef.current = false;
     boardSeededRef.current = false;
+    safeClickStreakRef.current = 0;
     endGameHistoryCheckedRef.current = false;
     setHasMadeFirstMove(false);
     resetScoreSubmission();
@@ -899,6 +1002,7 @@ export default function Home() {
     setStatus("playing");
     hasMadeFirstMoveRef.current = false;
     boardSeededRef.current = false;
+    safeClickStreakRef.current = 0;
     endGameHistoryCheckedRef.current = false;
     setHasMadeFirstMove(false);
     resetScoreSubmission();
@@ -1057,9 +1161,17 @@ export default function Home() {
         target = { ...target, hasBee: false, adjacentBees: 0 };
         activeBoard = activeBoard.map((cell) => (cell.id === cellId ? target : cell));
       }
+    } else {
+      activeBoard = applyEasyStreakProtection(activeBoard, cellId, difficulty, safeClickStreakRef.current);
+      target = activeBoard[cellId];
+
+      if (!target) {
+        return;
+      }
     }
 
     if (!isFirstClick && target.hasBee) {
+      safeClickStreakRef.current = 0;
       playSoundEffect(stingSoundRef.current);
       resumeBackgroundMusicAfterSoundEffect();
       setBoard(activeBoard.map((cell) => (cell.id === cellId ? { ...cell, revealed: true } : cell)));
@@ -1068,6 +1180,7 @@ export default function Home() {
     }
 
     const nextRevealedSafeCells = revealedSafeCells + 1;
+    safeClickStreakRef.current += 1;
 
     playSoundEffect(clickSoundRef.current);
     resumeBackgroundMusicAfterSoundEffect();
