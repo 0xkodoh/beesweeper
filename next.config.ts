@@ -54,7 +54,7 @@ const miniAppContentSecurityPolicy = [
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
+  "font-src 'self' data: https://fonts.gstatic.com",
   "media-src 'self' blob:",
   [
     "connect-src",
@@ -66,6 +66,7 @@ const miniAppContentSecurityPolicy = [
     "https://*.walletconnect.org",
     "wss://*.walletconnect.com",
     "wss://*.walletconnect.org",
+    "https://api.web3modal.org",
     "https://*.reown.com",
     "wss://*.reown.com",
     "https://*.base.org",
