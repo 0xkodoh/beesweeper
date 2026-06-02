@@ -1,0 +1,25 @@
+{
+  "accountAssociation": {
+    "header": "",
+    "payload": "",
+    "signature": ""
+  },
+  "miniapp": {
+    "version": "1",
+    "name": "BeeSweeper",
+    "subtitle": "Arcade hive puzzle",
+    "description": "Clear the hive. Avoid the bees. Submit scores on Base.",
+    "primaryCategory": "games",
+    "tags": ["base", "game", "arcade", "puzzle", "onchain"],
+    "homeUrl": "https://beesweeper.vercel.app/mini",
+    "iconUrl": "https://beesweeper.vercel.app/farcaster/icon.png",
+    "splashImageUrl": "https://beesweeper.vercel.app/farcaster/splash.png",
+    "splashBackgroundColor": "#07121F",
+    "heroImageUrl": "https://beesweeper.vercel.app/farcaster/hero.png",
+    "tagline": "Clear the hive",
+    "ogTitle": "BeeSweeper",
+    "ogDescription": "Clear the hive. Avoid the bees. Submit scores on Base.",
+    "ogImageUrl": "https://beesweeper.vercel.app/farcaster/og.png",
+    "requiredChains": ["eip155:8453"]
+  }
+}

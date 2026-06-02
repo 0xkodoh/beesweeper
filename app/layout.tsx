@@ -14,10 +14,75 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BeeSweeper",
-  description: "Clear the hive. Avoid the bees.",
+  metadataBase: new URL("https://beesweeper.vercel.app"),
+  title: {
+    default: "BeeSweeper",
+    template: "%s | BeeSweeper",
+  },
+  description: "Clear the hive. Avoid the bees. Submit scores on Base.",
+  applicationName: "BeeSweeper",
+  alternates: {
+    canonical: "/",
+  },
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/icon.png", type: "image/png" },
+      { url: "/farcaster/icon.png", type: "image/png", sizes: "1024x1024" },
+    ],
+    apple: [{ url: "/apple-icon.png", type: "image/png" }],
+  },
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: "BeeSweeper",
+    title: "BeeSweeper",
+    description: "Clear the hive. Avoid the bees. Submit scores on Base.",
+    images: [
+      {
+        url: "/farcaster/og.png",
+        width: 1200,
+        height: 630,
+        alt: "BeeSweeper",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "BeeSweeper",
+    description: "Clear the hive. Avoid the bees. Submit scores on Base.",
+    images: ["/farcaster/og.png"],
+  },
   other: {
     "base:app_id": "6a05008173adbbd91cb022f2",
+    "fc:miniapp": JSON.stringify({
+      version: "1",
+      imageUrl: "https://beesweeper.vercel.app/farcaster/embed.png",
+      button: {
+        title: "Play BeeSweeper",
+        action: {
+          type: "launch_miniapp",
+          name: "BeeSweeper",
+          url: "https://beesweeper.vercel.app/mini",
+          splashImageUrl: "https://beesweeper.vercel.app/farcaster/splash.png",
+          splashBackgroundColor: "#07121F",
+        },
+      },
+    }),
+    "fc:frame": JSON.stringify({
+      version: "1",
+      imageUrl: "https://beesweeper.vercel.app/farcaster/embed.png",
+      button: {
+        title: "Play BeeSweeper",
+        action: {
+          type: "launch_miniapp",
+          name: "BeeSweeper",
+          url: "https://beesweeper.vercel.app/mini",
+          splashImageUrl: "https://beesweeper.vercel.app/farcaster/splash.png",
+          splashBackgroundColor: "#07121F",
+        },
+      },
+    }),
   },
 };
 
